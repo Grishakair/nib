@@ -152,3 +152,7 @@ None of the NFT or arena parts exist yet; this section is the plan, not a featur
 - [`docs/SCENARIOS.md`](docs/SCENARIOS.md): use cases and the money-control model (Russian)
 - [`docs/DEVICE.md`](docs/DEVICE.md): hardware limits and what the board can handle (Russian)
 - [`docs/FLASH_DAY.md`](docs/FLASH_DAY.md): flashing day checklist (Russian)
+
+## License
+
+MIT, see [LICENSE](LICENSE).
