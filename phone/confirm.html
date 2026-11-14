@@ -1,0 +1,53 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Nib asks</title>
+<style>body{font:18px system-ui;max-width:420px;margin:0 auto;padding:24px;text-align:center;background:#1d1830;color:#fff}
+button{font-size:20px;padding:14px 26px;border-radius:12px;border:0;margin:6px}#ok{background:#45f5c8;color:#0d0820}#no{background:#3a2f6e;color:#fff}button:disabled{opacity:.4}
+small{color:#aab;word-break:break-all}#msg{min-height:3em;color:#ffd23f}a{color:#8f7bff}#steps{color:#aab;font-size:15px}</style>
+<h2>Nib asks</h2><div id=card>Loading…</div><p id=steps></p>
+<p><button id=ok disabled>Approve</button><button id=no>Reject</button></p><p id=msg></p>
+<script>
+const id = location.pathname.split("/").pop(), $ = s => document.getElementById(s), sleep = ms => new Promise(r => setTimeout(r, ms));
+let p, cfg; const msg = t => { $("msg").textContent = t; };
+function show() {
+  $("card").textContent = p.summary + (p.apy ? " (~" + p.apy.toFixed(2) + "% APY, variable)" : "") + (p.via === "intents" ? " - est. " + (p.eta || "?") + "s" : "");
+  $("steps").textContent = p.plan.length > 1 ? p.plan.length + " wallet confirmations: " + p.plan.map(s => s.label).join(" > ") : "";
+  $("ok").disabled = $("no").disabled = p.status !== "waiting";
+  if (p.status !== "waiting") msg("Status: " + p.status + (p.error ? " - " + p.error : ""));
+}
+async function init() { cfg = await (await fetch("/config")).json(); p = await (await fetch("/pending/" + id)).json(); show(); }
+async function post(body) { return (await fetch("/confirm/" + id, { method: "POST", body: JSON.stringify(body) })).json(); }
+async function poll() {
+  for (;;) { p = await (await fetch("/pending/" + id)).json();
+    if (p.status === "done") { msg("Done!"); const last = p.plan[p.plan.length - 1], c = cfg.chains[last.chain];
+      if (p.txHashes && c) { const a = document.createElement("a"); a.href = c.explorer + "/tx/" + p.txHashes[p.txHashes.length - 1]; a.textContent = " view tx"; a.target = "_blank"; $("msg").append(a); }
+      if (p.via === "intents") $("msg").append(document.createTextNode(p.followUp ? " - the swap is running; Nib will ask you again to deposit when it arrives." : " - the swap is running.")); return; }
+    if (["failed", "rejected", "expired"].includes(p.status)) { msg(p.status + (p.error ? ": " + p.error : "")); return; }
+    await sleep(1500); }
+}
+async function switchChain(eth, key) {
+  const c = cfg.chains[key];
+  try { await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: c.idHex }] }); }
+  catch (e) { if (e.code === 4902 || /unrecognized|not added/i.test(e.message || "")) await eth.request({ method: "wallet_addEthereumChain", params: [{ chainId: c.idHex, chainName: c.name, nativeCurrency: { name: c.native, symbol: c.native, decimals: 18 }, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer] }] }); else throw e; }
+}
+$("no").onclick = async () => { await post({ approve: false }); msg("Rejected."); $("ok").disabled = $("no").disabled = true; };
+$("ok").onclick = async () => {
+  try {
+    if (cfg.dry) { const r = await post({ approve: true }); msg("Dry-run: " + r.status + " (nothing sent)"); return; }
+    const eth = window.ethereum;
+    if (!eth) { msg("Open this page inside your wallet app's browser (MetaMask, Rabby, Trust)."); return; }
+    $("ok").disabled = true;
+    const [acc] = await eth.request({ method: "eth_requestAccounts" });
+    if (acc.toLowerCase() !== cfg.owner.toLowerCase()) { msg("Wrong wallet. Switch to " + cfg.owner.slice(0, 8) + "... or press Change wallet on Nib."); $("ok").disabled = false; return; }
+    const hashes = [];
+    for (const [i, s] of p.plan.entries()) {
+      await switchChain(eth, s.chain);
+      msg(`Confirm in your wallet (${i + 1}/${p.plan.length}): ${s.label}`);
+      const tx = { from: acc, to: s.to, data: s.data }; if (s.value) tx.value = s.value;
+      const h = await eth.request({ method: "eth_sendTransaction", params: [tx] });
+      hashes.push(h);
+      if (i < p.plan.length - 1) { msg("Waiting for " + s.label + " to confirm..."); let rc = null; for (let k = 0; k < 60 && !rc; k++) { rc = await eth.request({ method: "eth_getTransactionReceipt", params: [h] }); if (!rc) await sleep(2000); } if (!rc || rc.status !== "0x1") throw new Error(s.label + " failed"); }
+    }
+    msg("Sent. Verifying on-chain..."); const r = await post({ approve: true, txHashes: hashes }); if (r.error) throw new Error(r.error); poll();
+  } catch (e) { msg(e.message || String(e)); $("ok").disabled = false; }
+};
+init();
+</script>

@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Nib Wi-Fi</title>
+<style>body{font:18px system-ui;max-width:420px;margin:0 auto;padding:24px;text-align:center;background:#1d1830;color:#fff}
+input{font-size:20px;padding:14px;border-radius:12px;border:0;width:100%;box-sizing:border-box;margin:6px 0}
+button{font-size:20px;padding:14px 26px;border-radius:12px;border:0;background:#45f5c8;color:#0d0820;margin-top:8px}
+#msg{min-height:3em;color:#ffd23f;margin-top:10px}small{color:#aab}label{color:#aab;font-size:15px}</style>
+<h2>Connect Nib to Wi-Fi</h2>
+<p>Network: <b id=net>...</b></p>
+<input id=pw type=password placeholder="Wi-Fi password" autocomplete=off>
+<label><input type=checkbox id=show style="width:auto;margin:0 6px 0 0">Show password</label><br>
+<button id=go>Connect</button><p id=msg></p>
+<p><small>The password goes only to Nib and is stored on the device. (This page is a simulation: on the real device Nib serves it itself from its own temporary network.)</small></p>
+<script>
+const q = new URLSearchParams(location.search), ssid = q.get("ssid") || "", code = q.get("code") || "";
+const $ = s => document.getElementById(s); $("net").textContent = ssid || "(none)";
+$("show").onchange = () => { $("pw").type = $("show").checked ? "text" : "password"; };
+$("go").onclick = async () => {
+  $("msg").textContent = "Connecting..."; $("go").disabled = true;
+  try { const r = await fetch("/wifi/join", { method: "POST", body: JSON.stringify({ ssid, password: $("pw").value, code }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    $("msg").textContent = "Connected! You can close this page."; }
+  catch (e) { $("msg").textContent = (e.message || "Could not connect") + ". Check the password and try again."; $("go").disabled = false; }
+};
+</script>

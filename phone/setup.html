@@ -1,0 +1,23 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Nib wallet setup</title>
+<style>body{font:18px system-ui;max-width:420px;margin:0 auto;padding:24px;text-align:center;background:#1d1830;color:#fff}
+button,input{font-size:20px;padding:14px 22px;border-radius:12px;border:0;margin:6px;box-sizing:border-box}button{background:#45f5c8;color:#0d0820}
+#code{width:60%;text-align:center;letter-spacing:6px}#addr{width:100%;font-size:15px;text-align:center}
+small{color:#aab;word-break:break-all}#msg{min-height:3em;color:#ffd23f}hr{border:0;border-top:1px solid #3a2f6e;margin:18px 0}</style>
+<h2>Connect your wallet to Nib</h2>
+<p>Press <b>Change wallet</b> on Nib. Its screen shows a QR (this page opens with the code filled in).</p>
+<p><input id=code inputmode=numeric maxlength=6 placeholder="000000"></p>
+<p>Your wallet address (the one that will pay):</p>
+<p><input id=addr placeholder="0x..."></p>
+<p><button id=go>Save wallet</button></p><p id=msg></p>
+<hr><p><small>Just paste the public address (long-press your wallet's address to copy it). Nib never gets your keys. When you approve a payment, you scan a QR on Nib with your wallet's scanner and confirm in the wallet.<br>Inside a wallet app's browser you can also <a href="#" id=conn style="color:#8f7bff">connect it instead</a>.</small></p>
+<script>
+const qc = new URLSearchParams(location.search).get("code"); if (qc) document.getElementById("code").value = qc;
+const $ = s => document.getElementById(s), msg = t => { $("msg").textContent = t; };
+async function save(address) {
+  const r = await fetch("/pair", { method: "POST", body: JSON.stringify({ code: $("code").value.trim(), address }) });
+  const j = await r.json(); if (!r.ok) throw new Error(j.error);
+  msg("Saved: " + j.owner.slice(0, 8) + "..." + j.owner.slice(-6));
+}
+$("go").onclick = async () => { try { const a = $("addr").value.trim(); if (!/^0x[0-9a-fA-F]{40}$/.test(a)) throw new Error("Paste a valid 0x address (42 characters)."); await save(a); } catch (e) { msg(e.message || String(e)); } };
+$("conn").onclick = async e => { e.preventDefault(); try { if (!window.ethereum) throw new Error("No wallet found in this browser. Just paste the address above."); const [a] = await window.ethereum.request({ method: "eth_requestAccounts" }); $("addr").value = a; await save(a); } catch (err) { msg(err.message || String(err)); } };
+</script>

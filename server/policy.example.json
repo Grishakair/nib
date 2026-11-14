@@ -1,0 +1,10 @@
+{
+  "perTxUsd": 10,
+  "autoDailyUsd": 30,
+  "dailyUsd": 100,
+  "pinPerTxUsd": 50,
+  "newContactCooldownHours": 24,
+  "delaySeconds": 10,
+  "minOutRatio": 0.93,
+  "maxBalanceUsd": 100
+}

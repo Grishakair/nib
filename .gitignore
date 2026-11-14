@@ -1,0 +1,22 @@
+# secrets and per-user state: never commit
+.env
+firmware/**/secrets.h
+server/pocket-key.json
+server/pocket-state.json
+server/owner.json
+server/pin.json
+server/wifi.json
+server/contacts.json
+server/goal.json
+server/feed.json
+server/policy.json
+
+# build output, logs, backups, OS junk
+node_modules
+.pio/
+*.log
+*.bak
+.DS_Store
+
+# vendor datasheets and SDK dumps (large, not ours)
+vendor-es3c35p/

@@ -1,0 +1,16 @@
+<!doctype html><meta charset=utf-8><title>Pick your buddy</title>
+<body style="background:#14102a;color:#eee;font:15px system-ui;margin:0;padding:20px">
+<h2 style="margin:0 0 4px">Pick your buddy</h2><p style="margin:0 0 16px;color:#aaa">Hover to see them smile, click a card to choose.</p>
+<div id=g style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px"></div>
+<script src=/sprites.js></script><script>
+const {CHARACTERS,N}=NIB, S=6, ids=Object.keys(CHARACTERS), states=['idle','happy','love','wink','laugh','surprised','confused','sleepy','yawn','lookl','lookr','listening','thinking','ask','sad'];
+const cards=ids.map((id,i)=>{const c=CHARACTERS[id],d=document.createElement('div');
+ d.style.cssText='background:radial-gradient(circle at 50% 40%,#3a2f6e,#1d1830);border-radius:14px;padding:10px;text-align:center';
+ d.innerHTML=`<canvas width=${N*S} height=${N*S} style="image-rendering:pixelated;width:100%;max-width:${N*S*1.5}px"></canvas><div style="margin-top:6px"><b>${i+1}.</b> ${c.name}</div>`;
+ g.appendChild(d);const cv=d.querySelector('canvas'),x=cv.getContext('2d');const o={id,x,state:'idle',blink:0};
+ d.onmouseenter=()=>o.state='happy';d.onmouseleave=()=>o.state='idle';d.style.cursor='pointer';d.onclick=()=>{try{localStorage.setItem("nib.char",id)}catch(e){}location.href="/sim?c="+id};return o});
+let t=0;(function loop(){t++;for(const o of cards){const c=CHARACTERS[o.id],nm=o.state==='idle'&&t%90>84?'blink':o.state,f=c.FRAMES[nm];
+ o.x.clearRect(0,0,N*S,N*S);const bob=o.state==='idle'?Math.round(Math.sin(t/12+o.id.length)*1):0;
+ f.forEach((r,j)=>[...r].forEach((ch,i)=>{if(ch!=='.'){o.x.fillStyle=c.PALETTE[ch];o.x.fillRect(i*S,j*S+bob*S,S,S)}}))}
+ requestAnimationFrame(loop)})();
+</script>

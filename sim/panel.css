@@ -1,0 +1,46 @@
+/* Settings shade: slides down over the pet screen (like a phone's control centre). Sized to the 320x480 screen. */
+#shade{position:absolute;left:8px;top:8px;width:320px;height:480px;border-radius:10px;overflow:hidden;pointer-events:none}
+#scrim{position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;transition:opacity .28s;pointer-events:none}
+#scrim.open{opacity:1;pointer-events:auto}
+#sheet{position:absolute;left:0;right:0;top:34px;height:446px;background:linear-gradient(#18132f,#120e26);border-radius:0 0 18px 18px;box-shadow:0 14px 30px rgba(0,0,0,.6);
+  transform:translateY(-112%);transition:transform .28s cubic-bezier(.2,.8,.2,1);overflow-y:auto;padding:10px 12px 18px;font:12px/1.35 system-ui;color:#eee;pointer-events:auto;scrollbar-width:none}
+#sheet::-webkit-scrollbar{display:none}
+#sheet.open{transform:translateY(0)}
+.pane h4{margin:14px 0 6px;font-size:10.5px;letter-spacing:.09em;color:#8f87c9;text-transform:uppercase;font-weight:600}
+.pane .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pane .tile{border-radius:14px;padding:9px 10px;background:#241d44;border:1px solid #352c63;cursor:pointer;user-select:none}
+.pane .tile.on{background:#33298a;border-color:#6b58ff}
+.pane .tile.warn{background:#4a3414;border-color:#ff9a2e}
+.pane .tile b{display:block;font-size:12.5px}
+.pane .tile span{font-size:10.5px;color:#b9b3dc}
+.pane .card{border-radius:14px;background:#201a3c;border:1px solid #352c63;padding:10px;margin-top:8px}
+.pane .row{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.pane .dim{color:#aab;font-size:11px}
+.pane .btn{border:0;border-radius:10px;padding:7px 11px;background:#352c63;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap}
+.pane .btn.danger{background:#4d1b30;color:#ff8fa8}
+.pane .btn.small{padding:3px 8px;font-size:10px}
+.pane .buddies{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.pane .buddy{flex:0 0 auto;width:54px;text-align:center;font-size:9.5px;color:#aab;cursor:pointer}
+.pane .buddy canvas{display:block;width:50px;height:50px;image-rendering:pixelated;border-radius:12px;background:#241d44;border:2px solid transparent;margin:0 auto 2px}
+.pane .buddy.sel canvas{border-color:#7dff6b}
+.pane .buddy.sel{color:#fff}
+#sheet input[type=range]{width:100%;margin:6px 0 0}
+.pane .act{display:flex;justify-content:space-between;padding:3px 0;border-top:1px solid #2d2556}
+
+.pane .tile{position:relative}
+.pane .chev{position:absolute;right:8px;top:6px;font-style:normal;font-size:20px;color:#b9b3dc;padding:0 6px;line-height:1}
+#wifiLayer{position:absolute;left:0;right:0;top:34px;height:446px;background:#120e26;border-radius:0 0 18px 18px;padding:10px 12px 18px;font:12px/1.35 system-ui;color:#eee;overflow-y:auto;
+  transform:translateX(105%);transition:transform .25s;pointer-events:auto;scrollbar-width:none;box-shadow:0 14px 30px rgba(0,0,0,.6)}
+#wifiLayer::-webkit-scrollbar{display:none}
+#wifiLayer.open{transform:translateX(0)}
+.sw{width:42px;height:24px;border-radius:12px;background:#3a345f;position:relative;cursor:pointer;flex:0 0 auto}
+.sw i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:10px;background:#fff;transition:left .15s}
+.sw.on{background:#6b58ff}.sw.on i{left:20px}
+.pane .net{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid #2d2556;cursor:pointer}
+.pane .net:first-child{border-top:0}
+
+#pinLayer{position:absolute;left:0;right:0;top:34px;height:446px;background:#120e26;border-radius:0 0 18px 18px;padding:10px 12px 18px;font:12px/1.35 system-ui;color:#eee;
+  transform:translateY(-112%);transition:transform .25s;pointer-events:auto;box-shadow:0 14px 30px rgba(0,0,0,.6)}
+#pinLayer.open{transform:translateY(0)}
+.pk{height:46px;border-radius:23px;border:0;background:#241d44;color:#fff;font-size:20px;cursor:pointer}.pk:active{background:#3a2f8f}.pk.ok{background:#33298a}.pk:disabled{opacity:.35;cursor:default}
+.dot{width:14px;height:14px;border-radius:7px;border:2px solid #6b58ff;box-sizing:border-box}.dot.f{background:#6b58ff}

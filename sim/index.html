@@ -1,0 +1,159 @@
+<!doctype html><meta charset=utf-8><title>Nib simulator</title><link rel=stylesheet href=/sim-assets/panel.css>
+<body style="background:#111;color:#eee;font:14px system-ui;display:flex;gap:24px;padding:24px;flex-wrap:wrap">
+<div><canvas id=c width=320 height=480 style="border:8px solid #333;border-radius:18px;image-rendering:pixelated;background:#1d1830"></canvas></div>
+<div style="max-width:360px">
+<p style="margin-top:0">Buddy: <button id=prev>◀</button> <b id=nm></b> <button id=next>▶</button> · <a href=/gallery style="color:#8f7bff">gallery</a></p>
+<p>Type instead of voice, or tap a question:</p><div id=chips style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+<input id=t style="width:100%;padding:8px" placeholder="say something…"><button id=go style="margin-top:8px;padding:8px 16px">🎤 Speak</button>
+<div style="margin-top:8px;color:#aab"><label><input type=checkbox id=wake> Always listening: say "Hey Buddy"</label><br><label><input type=checkbox id=srv> use server speech-to-text (Whisper) instead of the browser</label></div>
+<p id=link></p><p id=phone style="color:#aab"></p>
+<p style="color:#aab">Wallet: <b id=wal style="color:#eee">...</b> <button id=chg>Change wallet</button> <button id=addc>Add contact</button> &nbsp;Payment QR <select id=qrmode><option value=scan>wallet scanner (recommended)</option><option value=plain>page in browser</option><option value=metamask>MetaMask link</option><option value=trust>Trust link</option></select></p><p id=pairmsg style="color:#ffd23f"></p>
+<p style="color:#aab">Pocket money: <b id=pk style="color:#eee">...</b> <button id=topup>Top up (QR)</button></p><p><button id=cancel style="display:none;padding:10px 18px;background:#ff4d79;color:#fff;border:0;border-radius:8px;font-size:16px">Cancel payment</button></p></div>
+<script src=/sprites.js></script><script>
+const {CHARACTERS,N}=NIB,ids=Object.keys(CHARACTERS),c=document.getElementById('c'),x=c.getContext('2d');
+let ci=0;try{const q=new URLSearchParams(location.search).get('c')||localStorage.getItem('nib.char');if(CHARACTERS[q])ci=ids.indexOf(q)}catch(e){}
+function pick(i){ci=(i+ids.length)%ids.length;nm.textContent=CHARACTERS[ids[ci]].name;try{localStorage.setItem('nib.char',ids[ci])}catch(e){}}
+prev.onclick=()=>pick(ci-1);next.onclick=()=>pick(ci+1);pick(ci);
+const DOT={idle:'#ffd23f',listening:'#ff4d79',thinking:'#a58bff',ask:'#ff9a2e',happy:'#7dff6b',sad:'#6b6785'};
+let state='idle',say='Hi! Ask me anything.',tick=0;
+let phoneBase='',qrUrl=null,qrRows=null,qrFor=null;
+const linkFor=u=>{const m=qrmode.value;if(m==='metamask')return 'https://link.metamask.io/dapp/'+u.replace(/^https?:\/\//,'');if(m==='trust')return 'https://link.trustwallet.com/open_url?coin_id=60&url='+encodeURIComponent(u);return u};
+let qrRaw=false;
+async function setQr(u,raw){if(raw!==undefined)qrRaw=raw;if(!u){qrUrl=null;qrRows=null;qrFor=null;qrRaw=false;return}qrUrl=u;const l=qrRaw?u:linkFor(u);if(qrFor===l)return;qrFor=l;try{const r=await(await fetch('/qr?text='+encodeURIComponent(l))).json();if(qrFor===l)qrRows=r.rows}catch(e){}}
+function drawQR(){const n=qrRows.length,Q=3,S=Math.floor(288/(n+2*Q)),px=S*(n+2*Q),ox=16+Math.floor((288-px)/2),oy=44+Math.floor((288-px)/2);
+ x.fillStyle='#fff';x.fillRect(ox,oy,px,px);x.fillStyle='#000';for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(qrRows[r][c]==='1')x.fillRect(ox+(Q+c)*S,oy+(Q+r)*S,S,S)}
+let sm=null,smFail=false,activeChip=null;let simWifi=true,simBt=true,micMuted=false,frozen=false,wifiSsid='Home-5G';
+function refreshWifi(){fetch('/wifi/state').then(r=>r.json()).then(s=>{wifiSsid=s.ssid||null}).catch(()=>{})}refreshWifi();setInterval(refreshWifi,15000);
+function refreshSummary(){fetch('/summary').then(r=>r.json()).then(s=>{sm=s;smFail=false;frozen=!!(s.pocket&&s.pocket.frozen)}).catch(()=>{sm=null;smFail=true})}refreshSummary();setInterval(refreshSummary,20000);
+let batt=null;if(navigator.getBattery)navigator.getBattery().then(b=>{batt=b}).catch(()=>{});
+function rr(x0,y0,w,h,r){x.beginPath();x.moveTo(x0+r,y0);x.arcTo(x0+w,y0,x0+w,y0+h,r);x.arcTo(x0+w,y0+h,x0,y0+h,r);x.arcTo(x0,y0+h,x0,y0,r);x.arcTo(x0,y0,x0+w,y0,r);x.closePath()}
+function wifiIcon(cx,cy,on){const by=cy+5;x.strokeStyle=on?'#fff':'#666';x.lineWidth=1.6;for(let i=1;i<=3;i++){x.beginPath();x.arc(cx,by,i*3.2,-Math.PI*0.78,-Math.PI*0.22);x.stroke()}x.fillStyle=on?'#fff':'#666';x.beginPath();x.arc(cx,by,1.3,0,7);x.fill();if(!on){x.strokeStyle='#ff4d79';x.beginPath();x.moveTo(cx-7,cy-4);x.lineTo(cx+7,cy+7);x.stroke()}}
+function batteryIcon(x0,y0,level,charging){x.strokeStyle='#fff';x.lineWidth=1.2;rr(x0,y0,20,10,2.5);x.stroke();x.fillStyle='#fff';x.fillRect(x0+21,y0+3,2,4);
+ x.fillStyle=level<0.2&&!charging?'#ff4d79':'#7dff6b';rr(x0+2,y0+2,Math.max(2,16*level),6,1);x.fill();
+ if(charging){x.fillStyle='#0d0820';x.beginPath();x.moveTo(x0+11,y0+1.5);x.lineTo(x0+7,y0+5.5);x.lineTo(x0+9.5,y0+5.5);x.lineTo(x0+8.5,y0+8.5);x.lineTo(x0+13,y0+4.5);x.lineTo(x0+10.5,y0+4.5);x.closePath();x.fill()}}
+function btIcon(cx,cy,on){x.strokeStyle=on?'#fff':'#666';x.lineWidth=1.4;x.beginPath();x.moveTo(cx-3.5,cy-3.5);x.lineTo(cx+3.5,cy+3.5);x.lineTo(cx,cy+7);x.lineTo(cx,cy-7);x.lineTo(cx+3.5,cy-3.5);x.lineTo(cx-3.5,cy+3.5);x.stroke()}
+function drawChips(){const p=sm&&sm.pocket,now=new Date(),hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),wifi=simWifi&&!!wifiSsid&&navigator.onLine&&!smFail;
+ x.fillStyle='#fff';x.font='bold 14px monospace';x.fillText(hm,18,20);
+ const amt=p?'$'+p.usd.toFixed(2):'--';x.font='bold 12px monospace';const aw=x.measureText(amt).width,pw=34+aw+(frozen?14:0);   // coin pill: the balance is always visible
+ x.fillStyle='rgba(255,255,255,.09)';rr(72,6,pw,18,9);x.fill();if(activeChip==='pocket'){x.strokeStyle='#7dff6b';x.lineWidth=2;rr(72,6,pw,18,9);x.stroke()}
+ x.fillStyle=frozen?'#8a8aa0':'#ffd23f';x.beginPath();x.arc(85,15,6.5,0,7);x.fill();x.fillStyle='#0d0820';x.font='bold 9px monospace';x.fillText('$',82.5,18.2);
+ x.fillStyle='#fff';x.font='bold 12px monospace';x.fillText(amt,96,19.5);if(frozen){x.fillStyle='#ff9a2e';x.fillRect(96+aw+5,10,2.5,9);x.fillRect(96+aw+9.5,10,2.5,9)}   // pause bars when auto-pay is paused
+ if(state==='listening'){x.fillStyle='rgba(255,77,121,'+(0.65+0.35*Math.sin(tick/5))+')';rr(213,7,7,12,3.5);x.fill();x.strokeStyle='rgba(255,77,121,.9)';x.lineWidth=1.5;x.beginPath();x.arc(216.5,14,6,0.15,Math.PI-0.15);x.stroke();x.beginPath();x.moveTo(216.5,20);x.lineTo(216.5,23);x.stroke()}   // recording mic
+ if(simBt)btIcon(238,15,true);wifiIcon(258,14,wifi);batteryIcon(280,10,batt?batt.level:1,batt?batt.charging:true);
+ x.strokeStyle='rgba(255,255,255,.28)';x.lineWidth=1.5;x.beginPath();x.moveTo(151,29);x.lineTo(160,33);x.lineTo(169,29);x.stroke();drawGoal();drawConfetti()}   // small chevron: pull down for settings
+function drawGoal(){const g=sm&&sm.goal;if(!g)return;const w=304,x0=8,y0=44,pct=Math.min(1,g.pct/100);   // savings goal: name, saved / target, progress bar
+ x.font='10px monospace';x.fillStyle='#cfc8ff';let nm=g.name;while(nm.length>3&&x.measureText(nm).width>150)nm=nm.slice(0,-2);if(nm!==g.name)nm+='...';x.fillText(nm,x0+2,y0-3);
+ x.textAlign='right';x.fillText('$'+g.saved.toFixed(0)+' / $'+g.target,x0+w-2,y0-3);x.textAlign='left';
+ x.fillStyle='rgba(255,255,255,.12)';rr(x0,y0,w,5,2.5);x.fill();x.fillStyle=g.done?'#7dff6b':'#ffd23f';if(pct>0){rr(x0,y0,Math.max(5,w*pct),5,2.5);x.fill()}}
+let confetti=[];function burst(){for(let i=0;i<70;i++)confetti.push({x:160+(Math.random()-.5)*80,y:70,vx:(Math.random()-.5)*5,vy:-2-Math.random()*4,c:['#ffd23f','#ff4d79','#7dff6b','#8f7bff','#45f5c8'][i%5],life:90+Math.random()*40})}
+function drawConfetti(){confetti=confetti.filter(p=>p.life>0);for(const p of confetti){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life--;x.fillStyle=p.c;x.fillRect(p.x,p.y,4,4)}}
+// the pet reacts to money arriving in the pocket and to reaching the goal (server events)
+let lastEv=null;async function pollEvents(){try{const r=await(await fetch('/events?since='+(lastEv===null?1e12:lastEv))).json();if(lastEv===null){lastEv=r.last;return}
+ for(const e of r.events){lastEv=Math.max(lastEv,e.id);const calm=EMO.concat('idle').includes(state);
+  if(e.type==='money_in'){burst();refreshSummary();if(calm){state='love';say='+$'+e.usd.toFixed(2)+' arrived! My pocket has $'+e.total.toFixed(2)+'.';setTimeout(()=>{if(EMO.includes(state))state='idle'},7000)}}
+  if(e.type==='over_cap'){state='sad';say='I hold $'+e.total.toFixed(0)+', above my $'+e.cap+' limit. Please take some back.';setTimeout(()=>{if(state==='sad')state='idle'},9000)}
+  if(e.type==='goal_done'){burst();setTimeout(burst,900);refreshSummary();state='laugh';say='Goal reached: '+e.name+'! You saved $'+e.target+'.';setTimeout(()=>{if(EMO.includes(state))state='idle'},9000)}}}catch(e){}}
+setInterval(pollEvents,4000);pollEvents();
+const EMO=['happy','love','laugh','wink','confused','surprised','sad'];   // feelings that fade back to idle on their own
+const STARS=Array.from({length:42},(_,i)=>({x:(i*97)%320,y:70+((i*53)%250),s:(i%3)+1,p:i*1.7}));
+let lastAct=Date.now(),idleFace=null,idleUntil=0,nextIdle=Date.now()+3000,wasAsleep=false,micLevel=0,wx=null;
+const hourNow=()=>{const f=new URLSearchParams(location.search).get('hour');return f!==null?+f:new Date().getHours()};   // ?hour=23 previews night mode
+['pointerdown','keydown'].forEach(ev=>window.addEventListener(ev,()=>{lastAct=Date.now()}));
+function fetchWx(){fetch('/weather').then(r=>r.json()).then(w=>{wx=typeof w.temp==='number'?w:null}).catch(()=>{})}fetchWx();setInterval(fetchWx,900000);
+function drawWeather(){if(!wx)return;const c=wx.code;x.save();x.translate(24,350);   // tiny weather icon + temperature in the bottom-left corner
+ const cloud=col=>{x.fillStyle=col;x.beginPath();x.arc(-5,2,5,0,7);x.arc(1,-2,6,0,7);x.arc(7,2,5,0,7);x.fill();x.fillRect(-5,2,12,5)};
+ if(c===0){x.fillStyle='#ffd23f';x.beginPath();x.arc(0,0,5,0,7);x.fill();x.strokeStyle='#ffd23f';x.lineWidth=1.5;for(let i=0;i<8;i++){const a=i*Math.PI/4;x.beginPath();x.moveTo(Math.cos(a)*8,Math.sin(a)*8);x.lineTo(Math.cos(a)*11,Math.sin(a)*11);x.stroke()}}
+ else if(c<=3){x.fillStyle='#ffd23f';x.beginPath();x.arc(-4,-4,4.5,0,7);x.fill();cloud('#dfe4ff')}
+ else if(c<=48){x.strokeStyle='#cfd3ff';x.lineWidth=2;for(let i=0;i<3;i++){x.beginPath();x.moveTo(-9,-5+i*5);x.lineTo(9,-5+i*5);x.stroke()}}
+ else if(c<=67||(c>=80&&c<=82)){cloud('#aab3e8');x.strokeStyle='#7fb4ff';x.lineWidth=1.8;for(let i=0;i<3;i++){x.beginPath();x.moveTo(-5+i*5,9);x.lineTo(-6+i*5,12);x.stroke()}}
+ else if(c<=77){cloud('#dfe4ff');x.fillStyle='#fff';for(let i=0;i<3;i++)x.fillRect(-5+i*5,10,2,2)}
+ else{cloud('#8a8fb8');x.fillStyle='#ffd23f';x.beginPath();x.moveTo(1,5);x.lineTo(-3,11);x.lineTo(0,11);x.lineTo(-1,15);x.lineTo(4,8);x.lineTo(1,8);x.closePath();x.fill()}
+ x.restore();x.fillStyle='#cfc8ff';x.font='11px monospace';x.fillText(Math.round(wx.temp)+'°C',40,354)}
+function draw(){const ch=CHARACTERS[ids[ci]],S=12,now=Date.now(),h=hourNow(),night=h>=22||h<6,eve=h>=18&&h<22;
+ const g=x.createRadialGradient(160,210,20,160,210,190);   // day / evening / night backdrop
+ if(night){g.addColorStop(0,'#232a63');g.addColorStop(1,'#080b1f')}else if(eve){g.addColorStop(0,'#5a3a78');g.addColorStop(1,'#1d1430')}else{g.addColorStop(0,'#3a2f6e');g.addColorStop(1,'#1d1830')}
+ x.fillStyle=g;x.fillRect(0,0,320,480);
+ if(night){for(const s of STARS){x.globalAlpha=.35+.5*Math.abs(Math.sin(tick/40+s.p));x.fillStyle='#fff';x.fillRect(s.x,s.y,s.s,s.s)}x.globalAlpha=1;x.fillStyle='#f4efc6';x.beginPath();x.arc(288,92,11,0,7);x.fill();x.fillStyle='#0c1030';x.beginPath();x.arc(293,89,10,0,7);x.fill()}
+ // life: blink, look around, yawn, fall asleep when nobody is around (sooner at night), wake up surprised
+ if(state!=='idle')lastAct=now;
+ const asleep=state==='idle'&&now-lastAct>(night?45000:120000);let name=state;
+ if(state==='idle'){if(asleep)name='sleepy';else{if(wasAsleep){idleFace='surprised';idleUntil=now+1200}
+   if(now>nextIdle){const r=Math.random();idleFace=r<.38?'lookl':r<.76?'lookr':'yawn';idleUntil=now+(idleFace==='yawn'?1800:1300);nextIdle=now+3500+Math.random()*4500}
+   name=now<idleUntil?idleFace:(tick%60>54?'blink':'idle')}}
+ wasAsleep=asleep;
+ const f=ch.FRAMES[name]||ch.FRAMES.idle,bob=(state==='idle'&&!asleep)?Math.round(Math.sin(tick/10)*3):(asleep?Math.round(Math.sin(tick/28)*2):0);
+ if(state==='listening'){const lv=micLevel>0.01?Math.min(1,micLevel*8):0.5+0.5*Math.sin(tick/6);for(let k=0;k<2;k++){const ph=(tick*2+k*35)%70,r=150+ph+lv*14;x.strokeStyle='rgba(255,77,121,'+Math.max(0,0.5-ph/160)+')';x.lineWidth=3;x.beginPath();x.ellipse(160,200+bob,r*0.75,r*0.82,0,0,7);x.stroke()}}   // pulsing ring while listening
+ x.fillStyle='rgba(0,0,0,.35)';x.beginPath();x.ellipse(160,352,70,9,0,0,7);x.fill();
+ if(qrUrl&&qrRows)drawQR();else f.forEach((r,j)=>[...r].forEach((k,i)=>{if(k!=='.'){x.fillStyle=ch.PALETTE[k];x.fillRect(16+i*S,54+j*S+bob,S,S)}}));
+ if(asleep){for(let k=0;k<3;k++){const t=((tick/2+k*25)%75)/75;x.globalAlpha=1-t;x.fillStyle='#cfc8ff';x.font='bold '+(12+k*4)+'px monospace';x.fillText('z',212+k*12+t*14,128-t*50-k*6)}x.globalAlpha=1}   // Zzz
+ if(state==='thinking'){x.fillStyle='#8f7bff';for(let i=0;i<3;i++)x.fillRect(130+i*30,36+(tick/6+i)%3*4,12,12)}
+ drawText();
+ if(state==='ask'){x.fillStyle='#ffd45e';x.font='11px monospace';x.fillText(hint,16,62)}
+ drawChips();drawWeather();tick++;requestAnimationFrame(draw)}
+// Answer bubble: the text is "typed" letter by letter; when it is longer than the box it follows the cursor, then glides up and down so it can be read in full.
+let lines=[],lastSay=null,scrollT=0,shown=0;const LH=18,BOX_Y=368,BOX_H=100,HOLD=110,SPEED=0.35,CPS=1.1;
+function wrapLines(t,w){const out=[];let l='';for(const wd of t.split(' ')){if(l&&x.measureText(l+wd).width>w){out.push(l.trim());l=''}l+=wd+' '}out.push(l.trim());return out}
+function drawText(){x.font='14px monospace';
+ if(say!==lastSay){lastSay=say;lines=wrapLines(say,288);scrollT=0;shown=0}
+ const total=say.length,typing=shown<total;if(typing)shown=Math.min(total,shown+CPS);
+ x.fillStyle='rgba(255,255,255,.07)';rr(8,BOX_Y-6,304,BOX_H+8,12);x.fill();                       // speech bubble with a tail pointing up at the pet
+ x.beginPath();x.moveTo(148,BOX_Y-6);x.lineTo(160,BOX_Y-15);x.lineTo(172,BOX_Y-6);x.closePath();x.fill();
+ const ov=Math.max(0,lines.length*LH-BOX_H+6),glide=ov/SPEED,cyc=HOLD+glide+HOLD;let off=0;
+ if(typing){let rem=Math.floor(shown),cl=0;for(let i=0;i<lines.length;i++){cl=i;if(rem<=lines[i].length)break;rem-=lines[i].length+1}off=Math.max(0,(cl+1)*LH-(BOX_H-6))}
+ else{const tt=scrollT%cyc;off=ov?Math.min(ov,Math.max(0,(tt-HOLD)*SPEED)):0;scrollT++}
+ x.save();x.beginPath();x.rect(8,BOX_Y,304,BOX_H);x.clip();x.fillStyle='#fff';
+ let rem=Math.floor(shown);lines.forEach((l,i)=>{const n=Math.max(0,Math.min(l.length,rem));rem-=l.length+1;if(n>0)x.fillText(l.slice(0,n),16,BOX_Y+16+i*LH-off)});x.restore();
+ if(!typing&&ov){x.fillStyle='#ffd23f';const pct=off/ov;x.fillRect(314,BOX_Y+4+pct*(BOX_H-24),3,16)}   // scroll indicator
+}
+async function ask(text){if(!simWifi||!wifiSsid){state='sad';say=simWifi?'No Wi-Fi network yet. Pull down from the top and tap Wi-Fi.':'Wi-Fi is off. Pull down from the top and turn it on.';return}state='listening';say='…';await new Promise(r=>setTimeout(r,500));state='thinking';
+ const r=await(await fetch('/ask',{method:'POST',body:JSON.stringify({text})})).json();state=r.state;say=r.say;
+ if(r.pendingId){link.innerHTML=`Phone confirm page: <a target=_blank href=/confirm/${r.pendingId}>/confirm/${r.pendingId}</a>`;poll(r.pendingId)}}
+let hint='approve in your wallet';let curJob=null;
+cancel.onclick=async()=>{if(curJob){await fetch('/cancel/'+curJob,{method:'POST'});cancel.style.display='none'}};
+async function poll(id){curJob=id;hint='approve in your wallet';let asking=false;for(;;){await new Promise(r=>setTimeout(r,500));const p=await(await fetch('/pending/'+id)).json();activeChip=['waiting','confirming'].includes(p.status)?'wallet':(p.kind==='pocket_send'&&['delayed','signing','sent'].includes(p.status))?'pocket':null;if(['done','failed','cancelled','rejected','expired'].includes(p.status)){activeChip=null;refreshSummary()}{const w=qrmode.value==='scan'&&p.pay;setQr(p.status==='waiting'?(w?p.pay.uri:(phoneBase?phoneBase+'/confirm/'+id:null)):null,!!w)}
+ if(p.status==='needs_pin'){state='ask';hint='enter your PIN';say='From my pocket: '+p.summary+'. Enter your PIN.';if(!asking){asking=true;window.pinApprove(id,'PIN to pay').then(()=>{asking=false})}continue}
+ if(p.status==='delayed'){hint='tap Cancel to stop it';const s=Math.max(0,Math.ceil((p.executeAt-Date.now())/1000));state='ask';say='From my pocket: '+p.summary+'. Sending in '+s+'s.';cancel.style.display='inline-block';continue}
+ cancel.style.display='none';
+ if(p.status==='signing'){state='thinking';say='Sending...';continue}
+ if(p.status==='sent'){state='thinking';say='Sent. Waiting for it to arrive...';continue}
+ if(p.status==='confirming'){state='thinking';say='Checking your payment...';continue}
+ if(p.status==='done'){state='wink';say='Done!';showPocket();return}
+ if(p.status==='cancelled'){state='confused';say='Cancelled, nothing was sent.';return}
+ if(p.status==='rejected'||p.status==='failed'||p.status==='expired'){state='sad';say=p.status==='failed'?'That did not work: '+(p.error||'unknown error'):p.status==='expired'?'That request ran out of time.':'Okay, I will not do it.';return}}}
+for(const q of ["What is the best APY on Plasma?","Put 100 there","Send 5 to me","How long to boil pasta?","Who won the last Real Madrid match?"]){const b=document.createElement('button');b.textContent=q;b.style.cssText='padding:6px 10px;border-radius:14px;border:1px solid #444;background:#222;color:#eee;cursor:pointer';b.onclick=()=>ask(q);chips.appendChild(b)}
+fetch('/config').then(r=>r.json()).then(c=>{phoneBase=c.phoneUrl.replace(/\/inbox$/,'');phone.innerHTML='On your phone (wallet browser) open: <b>'+c.phoneUrl+'</b>'+(c.dry?' <i>(DRY-RUN)</i>':'')});
+function showPocket(){fetch('/pocket').then(r=>r.json()).then(i=>{pk.textContent='$'+i.balanceUsd.toFixed(2)+' (auto-pays up to $'+i.policy.perTxUsd+'/payment, $'+i.policy.dailyUsd+'/day; spent today $'+i.spentToday.toFixed(2)+')'}).catch(()=>{})}showPocket();
+function showOwner(){fetch('/owner').then(r=>r.json()).then(o=>{wal.textContent=o.owner?o.owner.slice(0,8)+'...'+o.owner.slice(-6):'not connected'})}showOwner();
+chg.onclick=async()=>{const r=await(await fetch('/pair-start',{method:'POST'})).json();if(!r.code){say='I need the PIN to change the wallet.';state='sad';return}say='Scan this with your phone camera to connect your wallet.';state='ask';setQr(r.url+'?code='+r.code,false);setTimeout(()=>{if(qrUrl&&qrUrl.includes('/setup'))setQr(null)},300000);pairmsg.textContent='Pairing code: '+r.code+' (5 min)';
+ const old=wal.textContent;for(let i=0;i<150;i++){await new Promise(z=>setTimeout(z,2000));const o=await(await fetch('/owner')).json();const n=o.owner?o.owner.slice(0,8)+'...'+o.owner.slice(-6):'not connected';if(n!==old){wal.textContent=n;pairmsg.textContent='';setQr(null);say='Wallet connected!';state='happy';return}}}
+qrmode.onchange=()=>{if(qrUrl&&!qrRaw)setQr(qrUrl)};
+let topupWatch=null,lastBal=null;
+topup.onclick=async()=>{const d=await(await fetch('/pocket-address')).json();if(!d.address){say='Could not get the deposit address.';state='sad';return}
+ const base=(await(await fetch('/pocket')).json()).balanceUsd;topupWatch=base;setQr(d.address,true);hint='scan to top up';state='ask';
+ const nets=[...new Set(d.tokens.map(t=>t.network))].join(', ');say='To add money to my pocket, send USDC or USDT on '+nets+' to this address. Keep it under $'+((sm&&sm.pocket&&sm.pocket.cap)||100)+' in total. Other coins get lost.';
+ pairmsg.textContent='Deposit address: '+d.address;setTimeout(()=>{if(topupWatch!==null){topupWatch=null;if(qrRaw)setQr(null)}},600000)};
+setInterval(async()=>{if(topupWatch===null)return;try{const b=(await(await fetch('/pocket')).json()).balanceUsd;if(b>topupWatch+0.01){topupWatch=null;setQr(null);pairmsg.textContent='';say='Pocket topped up: $'+b.toFixed(2);state='happy';showPocket()}}catch(e){}},5000);
+addc.onclick=async()=>{const r=await(await fetch('/pair-start',{method:'POST'})).json();if(!r.code){say='I need the PIN to add a contact.';state='sad';return}say='Scan this with your phone camera to add a contact.';state='ask';setQr(r.url.replace('/setup','/contacts')+'?code='+r.code,false);setTimeout(()=>{if(qrUrl&&qrUrl.includes('/contacts'))setQr(null)},300000);pairmsg.textContent='Contact code: '+r.code+' (5 min)'};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let wakeRec=null,recActive=false;
+function stopWake(){const r=wakeRec;wakeRec=null;try{r&&r.stop()}catch(e){}}
+function startWake(){if(!SR||!wake.checked||wakeRec||recActive)return;const r=new SR();wakeRec=r;r.lang='en-US';r.continuous=true;r.interimResults=true;
+ r.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){if(!e.results[i].isFinal)continue;const m=e.results[i][0].transcript.toLowerCase().match(/hey,? ?(buddy|bud|body|buddie|budy|buddy's)\b[,.! ]*(.*)$/);
+   if(m){stopWake();idleFace='surprised';idleUntil=Date.now()+1200;const rest=m[2].trim();if(rest.length>3)ask(rest);else speak();return}}};
+ r.onend=()=>{if(wakeRec===r)wakeRec=null};r.onerror=()=>{};try{r.start()}catch(e){wakeRec=null}}
+setInterval(()=>{if(wake.checked&&!wakeRec&&!recActive&&state!=='thinking')startWake();if(!wake.checked&&wakeRec)stopWake()},1500);
+function speakBrowser(){const r=new SR();recActive=true;stopWake();r.lang='en-US';r.interimResults=true;r.continuous=false;state='listening';hint='listening...';say='I am listening...';let got=false;
+ r.onresult=e=>{const tx=[...e.results].map(z=>z[0].transcript).join(' ');say='"'+tx+'"';if(e.results[e.results.length-1].isFinal){got=true;recActive=false;ask(tx)}};
+ r.onerror=e=>{recActive=false;state='sad';say=e.error==='not-allowed'?'The microphone is blocked. Allow it in the browser.':e.error==='no-speech'?'I did not hear anything.':'I could not hear you ('+e.error+').'};
+ r.onend=()=>{recActive=false;if(!got&&state==='listening'){state='sad';say='I did not hear anything.'}};try{r.start()}catch(e){recActive=false}}
+async function speakServer(){recActive=true;stopWake();state='listening';hint='listening...';say='I am listening...';let ctx,stream;
+ try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){recActive=false;state='sad';say='The microphone is blocked. Allow it in the browser.';return}
+ ctx=new AudioContext();const src=ctx.createMediaStreamSource(stream),proc=ctx.createScriptProcessor(4096,1,1),chunks=[];let quiet=0,heard=false,t0=Date.now();
+ proc.onaudioprocess=ev=>{const d=new Float32Array(ev.inputBuffer.getChannelData(0));chunks.push(d);let s=0;for(const v of d)s+=v*v;const rms=Math.sqrt(s/d.length);micLevel=rms;if(rms>0.02){heard=true;quiet=0}else quiet+=d.length/ctx.sampleRate;
+  if((heard&&quiet>0.9)||Date.now()-t0>8000)finish()};src.connect(proc);proc.connect(ctx.destination);
+ async function finish(){proc.disconnect();src.disconnect();stream.getTracks().forEach(z=>z.stop());const rate=ctx.sampleRate;ctx.close();recActive=false;micLevel=0;
+  const all=new Float32Array(chunks.reduce((n,c)=>n+c.length,0));let o=0;for(const c of chunks){all.set(c,o);o+=c.length}
+  const ratio=rate/16000,out=new Int16Array(Math.floor(all.length/ratio));for(let i=0;i<out.length;i++){const v=Math.max(-1,Math.min(1,all[Math.floor(i*ratio)]));out[i]=v<0?v*0x8000:v*0x7fff}
+  state='thinking';say='...';const r=await(await fetch('/voice',{method:'POST',body:out.buffer})).json();state=r.state;say=r.say;if(r.heard)say='"'+r.heard+'" - '+r.say;if(r.pendingId){poll(r.pendingId)}}}
+function speak(){if(recActive)return;if(micMuted){state='sad';say='My microphone is off. Turn it on in settings.';return}if(SR&&!srv.checked)speakBrowser();else if(navigator.mediaDevices)speakServer();else{state='sad';say='This browser cannot hear me. Open the simulator in Chrome, or type.'}}
+go.onclick=()=>{const v=t.value.trim();if(v){t.value='';ask(v)}else speak()};t.onkeydown=e=>e.key==='Enter'&&go.click();draw();
+</script><script src=/sim-assets/panel.js></script>
